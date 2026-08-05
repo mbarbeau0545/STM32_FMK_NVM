@@ -26,7 +26,7 @@ typedef struct __t_sFMKNVM_BackendCapabilities
 
 /**
  * @brief Initialise one backend instance.
- * @note The backend prepares only its own resource. It must not retain data
+ * @note The backend prepares only its own resource.It must not retain data
  *       buffers supplied to Read or Program.
  * @param[in] f_Context_pv : Opaque backend context from t_sFMKNVM_BackendApi.
  * @retval RC_OK Success.
@@ -93,9 +93,7 @@ typedef t_eReturnCode
  * @retval RC_OK Success or operation accepted.
  * @retval RC_NVM_BACKEND_ERASE_ERROR Physical erase failed.
  */
-typedef t_eReturnCode (t_cbFMKNVM_BackendErase)(   void * f_Context_pv,
-                                                   t_uint32 f_Address_u32,
-                                                   t_uint32 f_Size_u32);
+typedef t_eReturnCode (t_cbFMKNVM_BackendErase)(void * f_Context_pv, t_uint32 f_Address_u32, t_uint32 f_Size_u32);
 /**
  * @brief Report whether a backend asynchronous operation is active.
  * @param[in] f_Context_pv : Opaque backend context.

@@ -26,12 +26,11 @@ typedef struct __t_sFMKNVM_BackendTemplateContext
 } t_sFMKNVM_BackendTemplateContext;
 
 /// @brief Lifetime-stable private context of the generated backend.
-static t_sFMKNVM_BackendTemplateContext
-    g_FMKNVM_BackendTemplateContext_s;
+static t_sFMKNVM_BackendTemplateContext g_FMKNVM_BackendTemplateContext_s;
 
 /**
  * @brief Initialize the generated backend and its private context.
- * @note No caller-owned pointer is retained. Hardware discovery or an
+ * @note No caller-owned pointer is retained.Hardware discovery or an
  *       asynchronous initialization may return RC_WARNING_PENDING.
  *
  * @param[in] f_Context_pv : Backend-owned context valid for module lifetime.
@@ -55,8 +54,7 @@ static t_eReturnCode s_FMKNVM_TemplateInit(void * f_Context_pv);
  * @retval RC_ERROR_PTR_NULL                 @ref RC_ERROR_PTR_NULL
  * @retval RC_ERROR_INSTANCE_NOT_INITIALIZED @ref RC_ERROR_INSTANCE_NOT_INITIALIZED
  */
-static t_eReturnCode s_FMKNVM_TemplateGetGeometry(   void * f_Context_pv,
-                                                     t_sFMKNVM_BackendGeometry * f_Geometry_ps);
+static t_eReturnCode s_FMKNVM_TemplateGetGeometry(void * f_Context_pv, t_sFMKNVM_BackendGeometry * f_Geometry_ps);
 
 /**
  * @brief Return the operational capabilities of the generated backend.
@@ -133,9 +131,7 @@ static t_eReturnCode s_FMKNVM_TemplateProgram(   void * f_Context_pv,
  * @retval RC_ERROR_INSTANCE_NOT_INITIALIZED  @ref RC_ERROR_INSTANCE_NOT_INITIALIZED
  * @retval RC_NVM_BACKEND_ERASE_ERROR         @ref RC_NVM_BACKEND_ERASE_ERROR
  */
-static t_eReturnCode s_FMKNVM_TemplateErase(  void * f_Context_pv,
-                                              t_uint32 f_Address_u32,
-                                              t_uint32 f_Size_u32);
+static t_eReturnCode s_FMKNVM_TemplateErase(void * f_Context_pv, t_uint32 f_Address_u32, t_uint32 f_Size_u32);
 
 /**
  * @brief Report whether an asynchronous backend operation is active.
@@ -157,8 +153,7 @@ static t_bool s_FMKNVM_TemplateIsBusy(void * f_Context_pv);
  * @retval RC_ERROR_PTR_NULL                 @ref RC_ERROR_PTR_NULL
  * @retval RC_ERROR_INSTANCE_NOT_INITIALIZED @ref RC_ERROR_INSTANCE_NOT_INITIALIZED
  */
-static t_eReturnCode s_FMKNVM_TemplateGetOperationResult(   void * f_Context_pv,
-                                                            t_eReturnCode * f_OperationResult_pe);
+static t_eReturnCode s_FMKNVM_TemplateGetOperationResult(void * f_Context_pv, t_eReturnCode * f_OperationResult_pe);
 
 /**
  * @brief Progress asynchronous work owned by the generated backend.
@@ -189,8 +184,7 @@ static const t_sFMKNVM_BackendApi c_FMKNVM_BackendTemplateApi_s =
  *********************************/
 const t_sFMKNVM_BackendApi * FMKNVM_BackendTemplate_GetApi(void)
 {
-    const t_sFMKNVM_BackendApi * BackendApi_ps =
-        &c_FMKNVM_BackendTemplateApi_s;
+    const t_sFMKNVM_BackendApi * BackendApi_ps = &c_FMKNVM_BackendTemplateApi_s;
 
     //---- 1- Return the lifetime-stable callback contract ----//
 
@@ -211,8 +205,7 @@ static t_eReturnCode s_FMKNVM_TemplateInit(void * f_Context_pv)
     }
     else
     {
-        t_sFMKNVM_BackendTemplateContext * Context_ps =
-            (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
+        t_sFMKNVM_BackendTemplateContext * Context_ps = (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
 
         Context_ps->lastOperationResult_e = RC_OK;
         Context_ps->isBusy_b = FALSE;
@@ -229,8 +222,7 @@ static t_eReturnCode s_FMKNVM_TemplateInit(void * f_Context_pv)
 /*********************************
  * s_FMKNVM_TemplateGetGeometry
  *********************************/
-static t_eReturnCode s_FMKNVM_TemplateGetGeometry(   void * f_Context_pv,
-                                                     t_sFMKNVM_BackendGeometry * f_Geometry_ps)
+static t_eReturnCode s_FMKNVM_TemplateGetGeometry(void * f_Context_pv, t_sFMKNVM_BackendGeometry * f_Geometry_ps)
 {
     t_eReturnCode Ret_e = RC_OK;
 
@@ -245,8 +237,7 @@ static t_eReturnCode s_FMKNVM_TemplateGetGeometry(   void * f_Context_pv,
     }
     else
     {
-        t_sFMKNVM_BackendTemplateContext * Context_ps =
-            (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
+        t_sFMKNVM_BackendTemplateContext * Context_ps = (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
 
         if(Context_ps->isInitialized_b == FALSE)
         {
@@ -255,14 +246,10 @@ static t_eReturnCode s_FMKNVM_TemplateGetGeometry(   void * f_Context_pv,
         else
         {
             //---- 2- Export the generated physical geometry ----//
-            f_Geometry_ps->storageSize_u32 =
-                FMKNVM_TEMPLATE_STORAGE_SIZE;
-            f_Geometry_ps->eraseUnitSize_u32 =
-                FMKNVM_TEMPLATE_ERASE_UNIT_SIZE;
-            f_Geometry_ps->programUnitSize_u32 =
-                FMKNVM_TEMPLATE_PROGRAM_UNIT_SIZE;
-            f_Geometry_ps->commitUnitSize_u32 =
-                FMKNVM_TEMPLATE_COMMIT_UNIT_SIZE;
+            f_Geometry_ps->storageSize_u32 = FMKNVM_TEMPLATE_STORAGE_SIZE;
+            f_Geometry_ps->eraseUnitSize_u32 = FMKNVM_TEMPLATE_ERASE_UNIT_SIZE;
+            f_Geometry_ps->programUnitSize_u32 = FMKNVM_TEMPLATE_PROGRAM_UNIT_SIZE;
+            f_Geometry_ps->commitUnitSize_u32 = FMKNVM_TEMPLATE_COMMIT_UNIT_SIZE;
         }
     }
 
@@ -288,8 +275,7 @@ static t_eReturnCode s_FMKNVM_TemplateGetCapabilities(   void * f_Context_pv,
     }
     else
     {
-        t_sFMKNVM_BackendTemplateContext * Context_ps =
-            (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
+        t_sFMKNVM_BackendTemplateContext * Context_ps = (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
 
         if(Context_ps->isInitialized_b == FALSE)
         {
@@ -300,8 +286,7 @@ static t_eReturnCode s_FMKNVM_TemplateGetCapabilities(   void * f_Context_pv,
             //---- 2- Export the generated operational capabilities ----//
             f_Capabilities_ps->eraseRequired_b = FALSE;
             f_Capabilities_ps->readWhileWriteSupported_b = FALSE;
-            f_Capabilities_ps->maxTransferSize_u32 =
-                FMKNVM_TEMPLATE_STORAGE_SIZE;
+            f_Capabilities_ps->maxTransferSize_u32 = FMKNVM_TEMPLATE_STORAGE_SIZE;
         }
     }
 
@@ -327,9 +312,7 @@ static t_eReturnCode s_FMKNVM_TemplateRead(   void * f_Context_pv,
     {
         Ret_e = RC_ERROR_PTR_NULL;
     }
-    else if((f_Size_u32 == 0U) ||
-            (f_Address_u32 >= FMKNVM_TEMPLATE_STORAGE_SIZE) ||
-            (f_Size_u32 >
+    else if((f_Size_u32 == 0U) || (f_Address_u32 >= FMKNVM_TEMPLATE_STORAGE_SIZE) || (f_Size_u32 >
              (FMKNVM_TEMPLATE_STORAGE_SIZE - f_Address_u32)))
     {
         Ret_e = RC_ERROR_PARAM_INVALID;
@@ -366,9 +349,7 @@ static t_eReturnCode s_FMKNVM_TemplateProgram(   void * f_Context_pv,
     {
         Ret_e = RC_ERROR_PTR_NULL;
     }
-    else if((f_Size_u32 == 0U) ||
-            (f_Address_u32 >= FMKNVM_TEMPLATE_STORAGE_SIZE) ||
-            (f_Size_u32 >
+    else if((f_Size_u32 == 0U) || (f_Address_u32 >= FMKNVM_TEMPLATE_STORAGE_SIZE) || (f_Size_u32 >
              (FMKNVM_TEMPLATE_STORAGE_SIZE - f_Address_u32)))
     {
         Ret_e = RC_ERROR_PARAM_INVALID;
@@ -389,9 +370,7 @@ static t_eReturnCode s_FMKNVM_TemplateProgram(   void * f_Context_pv,
 /*********************************
  * s_FMKNVM_TemplateErase
  *********************************/
-static t_eReturnCode s_FMKNVM_TemplateErase(  void * f_Context_pv,
-                                              t_uint32 f_Address_u32,
-                                              t_uint32 f_Size_u32)
+static t_eReturnCode s_FMKNVM_TemplateErase(void * f_Context_pv, t_uint32 f_Address_u32, t_uint32 f_Size_u32)
 {
     t_eReturnCode Ret_e = RC_OK;
 
@@ -400,9 +379,7 @@ static t_eReturnCode s_FMKNVM_TemplateErase(  void * f_Context_pv,
     {
         Ret_e = RC_ERROR_PTR_NULL;
     }
-    else if((f_Size_u32 == 0U) ||
-            (f_Address_u32 >= FMKNVM_TEMPLATE_STORAGE_SIZE) ||
-            (f_Size_u32 >
+    else if((f_Size_u32 == 0U) || (f_Address_u32 >= FMKNVM_TEMPLATE_STORAGE_SIZE) || (f_Size_u32 >
              (FMKNVM_TEMPLATE_STORAGE_SIZE - f_Address_u32)))
     {
         Ret_e = RC_ERROR_PARAM_INVALID;
@@ -430,8 +407,7 @@ static t_bool s_FMKNVM_TemplateIsBusy(void * f_Context_pv)
     //---- 1- Return the current asynchronous backend state ----//
     if(f_Context_pv != NULL)
     {
-        t_sFMKNVM_BackendTemplateContext * Context_ps =
-            (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
+        t_sFMKNVM_BackendTemplateContext * Context_ps = (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
 
         isBusy_b = Context_ps->isBusy_b;
     }
@@ -442,8 +418,7 @@ static t_bool s_FMKNVM_TemplateIsBusy(void * f_Context_pv)
 /*********************************
  * s_FMKNVM_TemplateGetOperationResult
  *********************************/
-static t_eReturnCode s_FMKNVM_TemplateGetOperationResult(   void * f_Context_pv,
-                                                            t_eReturnCode * f_OperationResult_pe)
+static t_eReturnCode s_FMKNVM_TemplateGetOperationResult(void * f_Context_pv, t_eReturnCode * f_OperationResult_pe)
 {
     t_eReturnCode Ret_e = RC_OK;
 
@@ -458,8 +433,7 @@ static t_eReturnCode s_FMKNVM_TemplateGetOperationResult(   void * f_Context_pv,
     }
     else
     {
-        t_sFMKNVM_BackendTemplateContext * Context_ps =
-            (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
+        t_sFMKNVM_BackendTemplateContext * Context_ps = (t_sFMKNVM_BackendTemplateContext *)f_Context_pv;
 
         if(Context_ps->isInitialized_b == FALSE)
         {
@@ -468,8 +442,7 @@ static t_eReturnCode s_FMKNVM_TemplateGetOperationResult(   void * f_Context_pv,
         else
         {
             //---- 2- Publish the latest completed physical result ----//
-            *f_OperationResult_pe =
-                Context_ps->lastOperationResult_e;
+            *f_OperationResult_pe = Context_ps->lastOperationResult_e;
         }
     }
 

@@ -72,13 +72,11 @@ t_eReturnCode FMKNVM_SetState(t_eCyclicModState f_State_e);
  * @retval RC_ERROR_PTR_NULL Output pointer is null.
  * @retval RC_ERROR_PARAM_INVALID Object identifier is invalid.
  */
-t_eReturnCode FMKNVM_GetObjectInfo(   t_eFMKNVM_ObjectId f_ObjectId_e,
-                                      t_sFMKNVM_ObjectInfo *
-                                      f_ObjectInfo_ps);
+t_eReturnCode FMKNVM_GetObjectInfo(t_eFMKNVM_ObjectId f_ObjectId_e, t_sFMKNVM_ObjectInfo * f_ObjectInfo_ps);
 
 /**
  * @brief Copy one logical object from its partition cache.
- * @note FMK_NVM does not retain the caller-owned destination buffer. The
+ * @note FMK_NVM does not retain the caller-owned destination buffer.The
  *       supplied size must equal the configured fixed object size.
  * @param[in] f_ObjectId_e : Configured logical object identifier.
  * @param[out] f_Data_pv : Caller-owned destination buffer.
@@ -88,16 +86,14 @@ t_eReturnCode FMKNVM_GetObjectInfo(   t_eFMKNVM_ObjectId f_ObjectId_e,
  * @retval RC_ERROR_PTR_NULL Destination pointer is null.
  * @retval RC_ERROR_PARAM_INVALID Identifier or size is invalid.
  */
-t_eReturnCode FMKNVM_GetObject(   t_eFMKNVM_ObjectId f_ObjectId_e,
-                                  void * f_Data_pv,
-                                  t_uint32 f_DataSize_u32);
+t_eReturnCode FMKNVM_GetObject(t_eFMKNVM_ObjectId f_ObjectId_e, void * f_Data_pv, t_uint32 f_DataSize_u32);
 
 /**
  * @brief Copy one logical object into its partition cache.
  * @note The supplied size must equal the configured fixed object size.
  *       FMK_NVM compares the cached bytes, marks the owning partition dirty
  *       only after a real change, and applies the partition commit policy from
- *       FMKNVM_Cyclic. The caller-owned source pointer is never retained.
+ *       FMKNVM_Cyclic.The caller-owned source pointer is never retained.
  * @param[in] f_ObjectId_e : Configured logical object identifier.
  * @param[in] f_Data_pv : Caller-owned source buffer.
  * @param[in] f_DataSize_u32 : Exact source and object size in bytes.
@@ -106,9 +102,7 @@ t_eReturnCode FMKNVM_GetObject(   t_eFMKNVM_ObjectId f_ObjectId_e,
  * @retval RC_ERROR_PTR_NULL Source pointer is null.
  * @retval RC_ERROR_PARAM_INVALID Identifier or size is invalid.
  */
-t_eReturnCode FMKNVM_SetObject(   t_eFMKNVM_ObjectId f_ObjectId_e,
-                                  const void * f_Data_pv,
-                                  t_uint32 f_DataSize_u32);
+t_eReturnCode FMKNVM_SetObject(t_eFMKNVM_ObjectId f_ObjectId_e, const void * f_Data_pv, t_uint32 f_DataSize_u32);
 
 /**
  * @brief Read the dirty state of one transactional partition.
@@ -118,8 +112,7 @@ t_eReturnCode FMKNVM_SetObject(   t_eFMKNVM_ObjectId f_ObjectId_e,
  * @retval RC_ERROR_PTR_NULL Output pointer is null.
  * @retval RC_ERROR_PARAM_INVALID Partition identifier is invalid.
  */
-t_eReturnCode FMKNVM_IsPartitionDirty(   t_eFMKNVM_PartitionId f_PartitionId_e,
-                                         t_bool * f_IsDirty_pb);
+t_eReturnCode FMKNVM_IsPartitionDirty(t_eFMKNVM_PartitionId f_PartitionId_e, t_bool * f_IsDirty_pb);
 
 /**
  * @brief Read current diagnostics of one transactional partition.

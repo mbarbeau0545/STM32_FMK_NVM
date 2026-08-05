@@ -20,7 +20,7 @@ typedef struct __t_sFMKNVM_PartitionStorageCfg
 /**
  * @brief Return the backend selected for the generated board configuration.
  * @note The returned API and context remain valid for the complete FMK_NVM
- *       lifetime. The callback table is immutable from the module viewpoint.
+ *       lifetime.The callback table is immutable from the module viewpoint.
  *
  * @retval Valid pointer Selected immutable backend API.
  * @retval NULL No backend is available for FMKNVM_EEPROM_TYPE.

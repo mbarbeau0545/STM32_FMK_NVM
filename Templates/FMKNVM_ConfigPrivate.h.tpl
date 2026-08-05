@@ -65,8 +65,7 @@ typedef struct __t_sFMKNVM_ObjectDescriptor
 /* CAUTION : Automatic generated code section for Partition Cache: End */
 
 /// @brief Generated logical partition definitions and commit policies.
-static const t_sFMKNVM_PartitionDescriptor
-    c_FMKNVM_PartitionDescriptors_as[FMKNVM_PARTITION_NB] =
+static const t_sFMKNVM_PartitionDescriptor c_FMKNVM_PartitionDescriptors_as[FMKNVM_PARTITION_NB] =
 {
     /* CAUTION : Automatic generated code section for Partition Cfg: Start */
 
@@ -74,15 +73,13 @@ static const t_sFMKNVM_PartitionDescriptor
 };
 
 /// @brief Generated mapping of logical objects into partition caches.
-static const t_sFMKNVM_ObjectDescriptor
-    c_FMKNVM_ObjectDescriptors_as[FMKNVM_OBJECT_NB] =
+static const t_sFMKNVM_ObjectDescriptor c_FMKNVM_ObjectDescriptors_as[FMKNVM_OBJECT_NB] =
 {
     /* CAUTION : Automatic generated code section for Object Cfg: Start */
 
     /* CAUTION : Automatic generated code section for Object Cfg: End */
 };
 
-_Static_assert(FMKNVM_EEPROM_TYPE < FMKNVM_EEPROM_TYPE_NB,
-               "FMK_NVM EEPROM type is invalid");
+_Static_assert(FMKNVM_EEPROM_TYPE < FMKNVM_EEPROM_TYPE_NB, "FMK_NVM EEPROM type is invalid");
 
 #endif // FMKNVM_CONFIGPRIVATE_H_INCLUDED

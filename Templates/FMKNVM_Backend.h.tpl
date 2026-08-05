@@ -10,7 +10,7 @@
 
 /**
  * @brief Return the immutable API of the generated concrete NVM backend.
- * @note The backend owns its context for the complete program lifetime. The
+ * @note The backend owns its context for the complete program lifetime.The
  *       returned callback table and its context must never be temporary.
  *
  * @retval Valid pointer Immutable generated backend API.
