@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="720" viewBox="0 0 1500 720" role="img" aria-labelledby="title desc">
+  <title id="title">Flux d'écriture FMK_NVM</title>
+  <desc id="desc">Les objets modifient un cache de partition, ensuite écrit automatiquement et de façon transactionnelle dans un slot Flash H7 ou EEPROM SPI.</desc>
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10z" fill="#334155"/></marker>
+    <style>.t{font:700 27px Arial;fill:#0f172a}.h{font:700 19px Arial;fill:#0f172a}.x{font:15px Arial;fill:#1e293b}.s{font:13px Arial;fill:#475569}.ar{stroke:#334155;stroke-width:2.5;fill:none;marker-end:url(#a)}</style>
+  </defs>
+  <rect width="1500" height="720" fill="#f8fafc"/>
+  <text x="55" y="55" class="t">FMK_NVM — workflow d'écriture transactionnelle</text>
+  <text x="55" y="82" class="s">Chaque record porte une partition complète contenant plusieurs objets logiques et leur bitmap de validité.</text>
+
+  <rect x="55" y="150" width="250" height="360" rx="15" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="82" y="195" class="h">1. Objets logiques</text>
+  <rect x="83" y="225" width="190" height="54" rx="7" fill="#fff" stroke="#60a5fa"/><text x="100" y="258" class="x">MachineId [uint16]</text>
+  <rect x="83" y="298" width="190" height="54" rx="7" fill="#fff" stroke="#60a5fa"/><text x="100" y="331" class="x">UserParam [uint16]</text>
+  <rect x="83" y="371" width="190" height="54" rx="7" fill="#fff" stroke="#60a5fa"/><text x="100" y="404" class="x">Mode [uint8]</text>
+  <text x="83" y="465" class="s">SetObject() → partition dirty</text>
+
+  <rect x="400" y="150" width="300" height="360" rx="15" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="430" y="195" class="h">2. Cœur FMK_NVM</text>
+  <text x="430" y="235" class="x">Snapshot partition + bitmap</text>
+  <text x="430" y="270" class="x">Header sérialisé + CRC</text>
+  <text x="430" y="305" class="x">Payload : cache complet</text>
+  <text x="430" y="340" class="x">Padding program-unit</text>
+  <text x="430" y="375" class="x">Vérification par relecture</text>
+  <text x="430" y="430" class="s">Une partition = un record atomique.</text>
+
+  <rect x="795" y="150" width="280" height="360" rx="15" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="825" y="195" class="h">3. Slot suivant</text>
+  <rect x="825" y="225" width="220" height="60" fill="#fff" stroke="#f59e0b"/><text x="842" y="261" class="x">Header + header CRC</text>
+  <rect x="825" y="285" width="220" height="92" fill="#fff" stroke="#f59e0b"/><text x="842" y="326" class="x">Payload snapshot</text><text x="842" y="352" class="s">taille logique + padding</text>
+  <rect x="825" y="377" width="220" height="60" fill="#fef2f2" stroke="#dc2626"/><text x="842" y="413" class="x">Commit final vierge</text>
+  <text x="825" y="470" class="s">Ancien slot conservé valide.</text>
+
+  <rect x="1170" y="150" width="275" height="360" rx="15" fill="#f3e8ff" stroke="#9333ea" stroke-width="2"/>
+  <text x="1200" y="195" class="h">4. Backend installé</text>
+  <text x="1200" y="240" class="x">Flash H7</text>
+  <text x="1200" y="267" class="s">program-unit 256 bits</text>
+  <text x="1200" y="310" class="x">ou EEPROM SPI</text>
+  <text x="1200" y="337" class="s">WREN + pages + WIP</text>
+  <text x="1200" y="395" class="x">Read-back → OK</text>
+  <text x="1200" y="440" class="s">Commit écrit seulement après vérification.</text>
+
+  <path d="M305 330 L400 330" class="ar"/><text x="315" y="310" class="s">Auto scheduler</text>
+  <path d="M700 330 L795 330" class="ar"/><text x="720" y="310" class="s">Program</text>
+  <path d="M1075 330 L1170 330" class="ar"/><text x="1094" y="310" class="s">API backend</text>
+  <path d="M1308 510 L1308 590 L936 590 L936 437" class="ar"/><text x="1035" y="575" class="s">relecture validée → écrire le commit final</text>
+  <text x="55" y="650" class="s">Coupure avant le commit : ancien record chargé au démarrage. Coupure après le commit : nouveau record chargé.</text>
+</svg>

@@ -1,0 +1,51 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="720" viewBox="0 0 1500 720" role="img" aria-labelledby="title desc">
+  <title id="title">Flux de lecture et reconstruction FMK_NVM</title>
+  <desc id="desc">Au démarrage, FMK_NVM valide les records de chaque partition puis reconstruit leur cache et leurs objets logiques.</desc>
+  <defs>
+    <marker id="a" markerWidth="10" markerHeight="10" refX="8" refY="5" orient="auto"><path d="M0,0 L9,5 L0,10z" fill="#334155"/></marker>
+    <style>.t{font:700 27px Arial;fill:#0f172a}.h{font:700 19px Arial;fill:#0f172a}.x{font:15px Arial;fill:#1e293b}.s{font:13px Arial;fill:#475569}.ar{stroke:#334155;stroke-width:2.5;fill:none;marker-end:url(#a)}</style>
+  </defs>
+  <rect width="1500" height="720" fill="#f8fafc"/>
+  <text x="55" y="55" class="t">FMK_NVM — lecture au démarrage et reconstruction RAM</text>
+  <text x="55" y="82" class="s">Chaque slot est contrôlé ; seul le record valide à la séquence la plus récente est retenu par partition.</text>
+
+  <rect x="55" y="150" width="295" height="380" rx="15" fill="#f3e8ff" stroke="#9333ea" stroke-width="2"/>
+  <text x="85" y="195" class="h">1. Support physique</text>
+  <text x="85" y="235" class="x">Flash H7 ou EEPROM SPI</text>
+  <rect x="85" y="270" width="230" height="55" fill="#dcfce7" stroke="#16a34a"/><text x="105" y="304" class="x">Slot A — valide, seq 24</text>
+  <rect x="85" y="335" width="230" height="55" fill="#fee2e2" stroke="#dc2626"/><text x="105" y="369" class="x">Slot B — commit incomplet</text>
+  <rect x="85" y="400" width="230" height="55" fill="#dcfce7" stroke="#16a34a"/><text x="105" y="434" class="x">Slot C — valide, seq 25</text>
+  <text x="85" y="495" class="s">Lecture par offsets NVM.</text>
+
+  <rect x="440" y="150" width="330" height="380" rx="15" fill="#fef3c7" stroke="#d97706" stroke-width="2"/>
+  <text x="470" y="195" class="h">2. Validation record</text>
+  <text x="470" y="240" class="x">• magic / version / partition ID</text>
+  <text x="470" y="275" class="x">• taille fixe attendue</text>
+  <text x="470" y="310" class="x">• CRC header</text>
+  <text x="470" y="345" class="x">• CRC payload</text>
+  <text x="470" y="380" class="x">• marqueur de commit</text>
+  <text x="470" y="440" class="s">Slot B est rejeté sans lire</text>
+  <text x="470" y="462" class="s">donnée comme partition active.</text>
+
+  <rect x="860" y="150" width="275" height="380" rx="15" fill="#dcfce7" stroke="#16a34a" stroke-width="2"/>
+  <text x="890" y="195" class="h">3. Sélection</text>
+  <text x="890" y="240" class="x">Comparer les séquences</text>
+  <text x="890" y="275" class="x">modulo 2³²</text>
+  <rect x="890" y="315" width="215" height="62" rx="7" fill="#fff" stroke="#22c55e"/><text x="910" y="352" class="x">Partition → Slot C</text>
+  <text x="890" y="425" class="s">Séquence 25 retenue.</text>
+  <text x="890" y="452" class="s">Les anciens slots restent</text>
+  <text x="890" y="474" class="s">utiles à la récupération.</text>
+
+  <rect x="1225" y="150" width="220" height="380" rx="15" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="1255" y="195" class="h">4. Cache partition</text>
+  <rect x="1255" y="245" width="160" height="55" rx="7" fill="#fff" stroke="#60a5fa"/><text x="1275" y="279" class="x">Objet A</text>
+  <rect x="1255" y="320" width="160" height="55" rx="7" fill="#fff" stroke="#60a5fa"/><text x="1275" y="354" class="x">Objet B</text>
+  <rect x="1255" y="395" width="160" height="55" rx="7" fill="#fff" stroke="#60a5fa"/><text x="1275" y="429" class="x">Objet C</text>
+  <text x="1255" y="490" class="s">GetObject() accède ensuite</text>
+  <text x="1255" y="512" class="s">qu'au cache RAM.</text>
+
+  <path d="M350 340 L440 340" class="ar"/><text x="370" y="320" class="s">Read</text>
+  <path d="M770 340 L860 340" class="ar"/><text x="790" y="320" class="s">records valides</text>
+  <path d="M1135 340 L1225 340" class="ar"/><text x="1153" y="320" class="s">copie payload</text>
+  <text x="55" y="630" class="s">La bitmap restaurée distingue chaque objet initialisé ; un objet absent fait appliquer son défaut par APP_SPM.</text>
+</svg>

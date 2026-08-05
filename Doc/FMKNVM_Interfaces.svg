@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="920" viewBox="0 0 1500 920" role="img" aria-labelledby="title desc">
+  <title id="title">Interfaces du module FMK_NVM</title>
+  <desc id="desc">Diagramme des interfaces entre l'application, FMK_NVM, le contrat backend et les implémentations spécifiques Flash ou EEPROM.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="11" markerHeight="11" refX="9" refY="5.5" orient="auto">
+      <path d="M 0 0 L 10 5.5 L 0 11 z" fill="#334155"/>
+    </marker>
+    <style>
+      .title { font: 700 32px Arial, sans-serif; fill: #0f172a; }
+      .subtitle { font: 16px Arial, sans-serif; fill: #475569; }
+      .box-title { font: 700 22px Arial, sans-serif; fill: #0f172a; }
+      .box-text { font: 15px Arial, sans-serif; fill: #1e293b; }
+      .small { font: 13px Arial, sans-serif; fill: #334155; }
+      .label { font: 700 14px Arial, sans-serif; fill: #334155; }
+      .arrow { stroke: #334155; stroke-width: 2.5; fill: none; marker-end: url(#arrow); }
+      .dash { stroke: #64748b; stroke-width: 2; stroke-dasharray: 8 6; fill: none; marker-end: url(#arrow); }
+    </style>
+  </defs>
+
+  <rect width="1500" height="920" fill="#f8fafc"/>
+  <text x="70" y="60" class="title">FMK_NVM — interfaces et séparation des responsabilités</text>
+  <text x="70" y="90" class="subtitle">Le cœur ne connaît ni le MCU, ni le bus, ni le composant EEPROM sélectionné.</text>
+
+  <rect x="70" y="155" width="270" height="255" rx="16" fill="#dbeafe" stroke="#2563eb" stroke-width="2"/>
+  <text x="105" y="200" class="box-title">Application</text>
+  <text x="105" y="235" class="box-text">APP_SPM</text>
+  <text x="105" y="270" class="box-text">• valeurs typées</text>
+  <text x="105" y="300" class="box-text">• min / max / défaut</text>
+  <text x="105" y="330" class="box-text">• version d'objet</text>
+  <text x="105" y="370" class="small">Utilise seulement l'API publique.</text>
+
+  <rect x="490" y="125" width="410" height="345" rx="16" fill="#dcfce7" stroke="#16a34a" stroke-width="2.5"/>
+  <text x="530" y="175" class="box-title">FMK_NVM — cœur générique</text>
+  <text x="530" y="215" class="box-text">FMK_NVM.h / FMK_NVM.c</text>
+  <line x1="530" y1="235" x2="860" y2="235" stroke="#86efac" stroke-width="2"/>
+  <text x="530" y="270" class="box-text">• objets → partitions / offsets</text>
+  <text x="530" y="300" class="box-text">• caches, bitmap et comparaison</text>
+  <text x="530" y="330" class="box-text">• politique d'écriture automatique</text>
+  <text x="530" y="360" class="box-text">• slots, CRC et récupération</text>
+  <text x="530" y="410" class="small">Aucune dépendance HAL, Flash, I²C, SPI ou EEPROM.</text>
+
+  <rect x="490" y="570" width="410" height="215" rx="16" fill="#fef3c7" stroke="#d97706" stroke-width="2.5"/>
+  <text x="530" y="620" class="box-title">Contrat backend privé</text>
+  <text x="530" y="655" class="box-text">FMKNVM_Backend.h</text>
+  <text x="530" y="695" class="box-text">BackendApi : Init, Read, Program,</text>
+  <text x="530" y="722" class="box-text">Erase, IsBusy, Cyclic, GetGeometry</text>
+  <text x="530" y="755" class="small">Géométrie et capacités génériques uniquement.</text>
+
+  <rect x="1080" y="95" width="345" height="245" rx="16" fill="#f3e8ff" stroke="#9333ea" stroke-width="2.5"/>
+  <text x="1120" y="145" class="box-title">Configuration spécifique</text>
+  <text x="1120" y="180" class="box-text">FMKCFG_ConfigSpecific</text>
+  <text x="1120" y="220" class="box-text">Backend + stockage partitions</text>
+  <text x="1120" y="255" class="box-text">Sélectionne l'unique backend</text>
+  <text x="1120" y="285" class="box-text">et son mapping physique.</text>
+
+  <rect x="1020" y="460" width="190" height="175" rx="14" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+  <text x="1050" y="505" class="box-title">Flash H7</text>
+  <text x="1050" y="540" class="box-text">flash word</text>
+  <text x="1050" y="570" class="box-text">ECC / cache</text>
+  <text x="1050" y="600" class="small">config privée</text>
+
+  <rect x="1235" y="460" width="190" height="175" rx="14" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+  <text x="1265" y="505" class="box-title">Flash G4</text>
+  <text x="1265" y="540" class="box-text">double-word</text>
+  <text x="1265" y="570" class="box-text">pages / RAM</text>
+  <text x="1265" y="600" class="small">config privée</text>
+
+  <rect x="1020" y="690" width="190" height="175" rx="14" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+  <text x="1050" y="735" class="box-title">EEPROM I²C</text>
+  <text x="1050" y="770" class="box-text">FMK_I2C</text>
+  <text x="1050" y="800" class="box-text">pages / ACK poll</text>
+  <text x="1050" y="830" class="small">config privée</text>
+
+  <rect x="1235" y="690" width="190" height="175" rx="14" fill="#e0f2fe" stroke="#0284c7" stroke-width="2"/>
+  <text x="1265" y="735" class="box-title">EEPROM SPI</text>
+  <text x="1265" y="770" class="box-text">FMK_SPI</text>
+  <text x="1265" y="800" class="box-text">WREN / WIP</text>
+  <text x="1265" y="830" class="small">config privée</text>
+
+  <path d="M 340 282 L 490 282" class="arrow"/>
+  <text x="358" y="262" class="label">API publique</text>
+  <text x="354" y="307" class="small">GetObject / SetObject</text>
+
+  <path d="M 695 470 L 695 570" class="arrow"/>
+  <text x="720" y="530" class="label">API générique</text>
+
+  <path d="M 900 675 L 1075 305" class="dash"/>
+  <text x="883" y="500" class="label">obtient l'API</text>
+
+  <path d="M 1250 340 L 1115 460" class="arrow"/>
+  <path d="M 1250 340 L 1330 460" class="arrow"/>
+  <path d="M 1250 340 L 1115 690" class="arrow"/>
+  <path d="M 1250 340 L 1330 690" class="arrow"/>
+  <text x="1275" y="390" class="small">un seul backend est compilé</text>
+</svg>
