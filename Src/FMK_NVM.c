@@ -1,7 +1,16 @@
 /*********************************************************************
- * @file FMK_NVM.c
- * @brief Opaque byte-image persistent storage module.
- *********************************************************************/
+ * @file        FMK_NVM.c
+ * @brief       Opaque byte-image persistent storage module.e.
+ *              
+ *
+ * @author      mba
+ * @date        07/08/2026
+ * @version     1.0
+ */
+  
+// ********************************************************************
+// *                      Includes
+// ********************************************************************
 #include "Library/SafeMem/SafeMem.h"
 #include "Library/FIFO/Src/LIBFifo.h"
 #include "Library/CRC/CRC.h"
@@ -12,7 +21,9 @@
 #include "FMK_CFG/FMKCFG_ConfigFiles/FMKNVM_ConfigPrivate.h"
 #include "FMK_CFG/FMKCFG_ConfigSpecific/FMKNVM_ConfigSpecific.h"
 #include "APP_CTRL/APP_SYS/Src/APP_SYS.h"
-
+// ********************************************************************
+// *                      Defines
+// ********************************************************************
 /// @brief Serialized record header size in bytes.
 #define FMKNVM_RECORD_HEADER_SIZE ((t_uint32)24U)
 
@@ -34,10 +45,19 @@ typedef enum __t_eFMKNVM_InitState
     FMKNVM_CFG_BACKEND = 0U,
     FMKNVM_CFG_GEOMETRY,
     FMKNVM_CFG_CAPABILITIES,
+    FMKNVM_CFG_LAYOUT,
     FMKNVM_CFG_RESTORE,
     FMKNVM_CFG_DONE,
     FMKNVM_CFG_ERROR
 } t_eFMKNVM_InitState;
+/// @brief Runtime backend-relative storage layout derived from backend geometry.
+typedef struct __t_sFMKNVM_PartitionStorageLayout
+{
+    t_uint32 storageOffset_u32; ///< Backend-relative start offset of the partition.
+    t_uint32 storageSize_u32;   ///< Total physical bytes reserved for the partition.
+    t_uint32 slotStride_u32;    ///< Physical distance between two consecutive slots.
+} t_sFMKNVM_PartitionStorageLayout;
+
 /// @brief Runtime information for one transactional partition.
 typedef struct __t_sFMKNVM_PartitionRuntime
 {
@@ -50,8 +70,8 @@ typedef struct __t_sFMKNVM_PartitionRuntime
     t_bool dirty_b;                                  ///< Cache differs from NVM.
     t_bool commitPending_b;                          ///< Commit request is pending.
     t_bool hasValidRecord_b;                         ///< Valid record available.
-    const t_sFMKNVM_PartitionDescriptor * desc_ps;  ///< Logical configuration.
-    t_sFMKNVM_PartitionStorageCfg storage_s;        ///< Physical configuration.
+    const t_sFMKNVM_PartitionDescriptor * desc_ps;  ///< Static logical configuration.
+    t_sFMKNVM_PartitionStorageLayout storage_s;     ///< Derived physical storage layout.
 } t_sFMKNVM_PartitionRuntime;
 
 /// @brief Describes one queued automatic commit request.
@@ -78,6 +98,9 @@ typedef enum __t_eFMKNVM_CommitState
     FMKNVM_COMMIT_STATE_NB
 } t_eFMKNVM_CommitState;
 
+// ********************************************************************
+// *                      Variables
+// ********************************************************************
 /// @brief Current external module state.
 static t_eCyclicModState g_FMKNVM_Sts_e = STATE_CYCLIC_CFG;
 /// @brief Current configuration sub-state.
@@ -120,14 +143,18 @@ static t_uint32 g_FMKNVM_SnapshotGeneration_u32;
 static t_uint16 g_FMKNVM_ActiveSlot_u16;
 /// @brief A backend operation has returned RC_WARNING_PENDING.
 static t_bool g_FMKNVM_BackendOperationPending_b;
+
+//********************************************************************************
+//                      Private functions - Declaration
+//********************************************************************************
 /**
  * @brief Restore the latest valid record of one persistent object.
  * @note Called exclusively by the configuration state machine.The cache owned
  *       by ConfigPrivate is populated; no application buffer is retained.
  * @param[in] f_PartitionId_e : Configured object to restore.
  * @retval RC_OK A valid record was restored, or no record is present.
- * @retval RC_NVM_BACKEND_READ_ERROR Backend storage could not be read.
- * @retval RC_NVM_CRC_ERROR A candidate record failed integrity validation.
+ * @retval RC_ERROR_NVM_BACKEND_READ Backend storage could not be read.
+ * @retval RC_ERROR_NVM_CRC_ERROR A candidate record failed integrity validation.
  */
 static t_eReturnCode s_FMKNVM_RestorePartition(t_eFMKNVM_PartitionId f_PartitionId_e);
 /**
@@ -172,8 +199,7 @@ static t_eReturnCode s_FMKNVM_AutomaticCommitMngmt(void);
  * @retval RC_OK The scheduling decision was produced.
  * @retval RC_ERROR_PTR_NULL One input or output pointer is null.
  */
-static t_eReturnCode
-s_FMKNVM_IsCommitDue(const t_sFMKNVM_PartitionRuntime * f_Runtime_ps, t_bool * f_IsCommitDue_pb);
+static t_eReturnCode s_FMKNVM_IsCommitDue(const t_sFMKNVM_PartitionRuntime * f_Runtime_ps, t_bool * f_IsCommitDue_pb);
 /**
  * @brief Queue one object generation for persistence.
  * @param[in] f_PartitionId_e : Configured object identifier.
@@ -181,8 +207,7 @@ s_FMKNVM_IsCommitDue(const t_sFMKNVM_PartitionRuntime * f_Runtime_ps, t_bool * f
  * @retval RC_WARNING_NO_OPERATION Object is already clean or pending.
  * @retval RC_WARNING_BUSY Commit FIFO is full.
  */
-static t_eReturnCode
-s_FMKNVM_EnqueueCommit(t_eFMKNVM_PartitionId f_PartitionId_e);
+static t_eReturnCode s_FMKNVM_EnqueueCommit(t_eFMKNVM_PartitionId f_PartitionId_e);
 /**
  * @brief Progress one bounded step of the active commit transaction.
  * @note A stable snapshot is serialized before the first backend access.
@@ -190,17 +215,17 @@ s_FMKNVM_EnqueueCommit(t_eFMKNVM_PartitionId f_PartitionId_e);
  *       equals the current cache generation.
  * @retval RC_OK No operation is active or one step completed.
  * @retval RC_WARNING_PENDING A backend operation or commit remains active.
- * @retval RC_NVM_BACKEND_PROGRAM_ERROR Backend programming failed.
- * @retval RC_NVM_BACKEND_ERASE_ERROR Backend erasing failed.
+ * @retval RC_ERROR_NVM_BACKEND_PROGRAM Backend programming failed.
+ * @retval RC_ERROR_NVM_BACKEND_ERASE Backend erasing failed.
  */
 static t_eReturnCode s_FMKNVM_ProcessCommit(void);
 /**
  * @brief Poll the completion of the active asynchronous backend operation.
  * @retval RC_OK The operation completed successfully.
  * @retval RC_WARNING_PENDING The backend remains busy.
- * @retval RC_NVM_BACKEND_READ_ERROR The active read failed.
- * @retval RC_NVM_BACKEND_PROGRAM_ERROR The active program failed.
- * @retval RC_NVM_BACKEND_ERASE_ERROR The active erase failed.
+ * @retval RC_ERROR_NVM_BACKEND_READ The active read failed.
+ * @retval RC_ERROR_NVM_BACKEND_PROGRAM The active program failed.
+ * @retval RC_ERROR_NVM_BACKEND_ERASE The active erase failed.
  */
 static t_eReturnCode s_FMKNVM_CommitWaitBackendState(void);
 /**
@@ -219,54 +244,54 @@ static t_eReturnCode s_FMKNVM_CommitPrepareState(void);
  * @brief Erase the slot selected for the active Flash transaction.
  * @retval RC_OK The slot was erased synchronously.
  * @retval RC_WARNING_PENDING The erase was accepted asynchronously.
- * @retval RC_NVM_BACKEND_ERASE_ERROR The erase failed.
+ * @retval RC_ERROR_NVM_BACKEND_ERASE The erase failed.
  */
 static t_eReturnCode s_FMKNVM_CommitEraseState(void);
 /**
  * @brief Invalidate the marker of a reused non-erasable slot.
  * @retval RC_OK The marker was invalidated synchronously.
  * @retval RC_WARNING_PENDING Programming continues asynchronously.
- * @retval RC_NVM_BACKEND_PROGRAM_ERROR Programming failed.
+ * @retval RC_ERROR_NVM_BACKEND_PROGRAM Programming failed.
  */
 static t_eReturnCode s_FMKNVM_CommitInvalidateMarkerState(void);
 /**
  * @brief Program the active serialized header and payload.
  * @retval RC_OK The record was programmed synchronously.
  * @retval RC_WARNING_PENDING Programming continues asynchronously.
- * @retval RC_NVM_BACKEND_PROGRAM_ERROR Programming failed.
+ * @retval RC_ERROR_NVM_BACKEND_PROGRAM Programming failed.
  */
 static t_eReturnCode s_FMKNVM_CommitProgramRecordState(void);
 /**
  * @brief Read the active candidate record for verification.
  * @retval RC_OK The record was read synchronously.
  * @retval RC_WARNING_PENDING Reading continues asynchronously.
- * @retval RC_NVM_BACKEND_READ_ERROR Reading failed.
+ * @retval RC_ERROR_NVM_BACKEND_READ Reading failed.
  */
 static t_eReturnCode s_FMKNVM_CommitReadRecordState(void);
 /**
  * @brief Compare the candidate record with its stable serialized source.
  * @retval RC_OK Every byte matches.
- * @retval RC_NVM_VERIFY_ERROR The readback differs.
+ * @retval RC_ERROR_NVM_NVM_VERIFY The readback differs.
  */
 static t_eReturnCode s_FMKNVM_CommitCheckRecordState(void);
 /**
  * @brief Program the final commit marker of the candidate slot.
  * @retval RC_OK The marker was programmed synchronously.
  * @retval RC_WARNING_PENDING Programming continues asynchronously.
- * @retval RC_NVM_BACKEND_PROGRAM_ERROR Programming failed.
+ * @retval RC_ERROR_NVM_BACKEND_PROGRAM Programming failed.
  */
 static t_eReturnCode s_FMKNVM_CommitProgramMarkerState(void);
 /**
  * @brief Read the final commit marker for verification.
  * @retval RC_OK The marker was read synchronously.
  * @retval RC_WARNING_PENDING Reading continues asynchronously.
- * @retval RC_NVM_BACKEND_READ_ERROR Reading failed.
+ * @retval RC_ERROR_NVM_BACKEND_READ Reading failed.
  */
 static t_eReturnCode s_FMKNVM_CommitReadMarkerState(void);
 /**
  * @brief Validate the final marker read from persistent storage.
  * @retval RC_OK The marker is valid.
- * @retval RC_NVM_VERIFY_ERROR The marker is invalid.
+ * @retval RC_ERROR_NVM_NVM_VERIFY The marker is invalid.
  */
 static t_eReturnCode s_FMKNVM_CommitCheckMarkerState(void);
 /**
@@ -322,12 +347,32 @@ static t_uint16 s_FMKNVM_ReadU16(const t_uint8 * f_Data_pcu8);
  */
 static t_uint32 s_FMKNVM_GetMarkerOffset(   const t_sFMKNVM_PartitionDescriptor * f_Descriptor_ps);
 /**
+ * @brief Align one unsigned value upward without allowing 32-bit overflow.
+ * @param[in] f_Value_u32 : Value to align.
+ * @param[in] f_Alignment_u32 : Non-zero alignment.
+ * @param[out] f_AlignedValue_pu32 : Aligned result.
+ * @retval RC_OK Alignment completed.
+ * @retval RC_ERROR_WRONG_CONFIG Alignment is zero or the aligned value overflows.
+ */
+static t_eReturnCode s_FMKNVM_AlignUp(t_uint32 f_Value_u32, t_uint32 f_Alignment_u32,
+                                      t_uint32 * f_AlignedValue_pu32);
+/**
+ * @brief Derive every partition storage range from logical configuration and backend geometry.
+ * @note No physical partition size or offset is stored in ConfigPrivate.
+ * @retval RC_OK Every partition fits in the selected backend.
+ * @retval RC_ERROR_WRONG_CONFIG Geometry/configuration is invalid or total storage is exceeded.
+ */
+static t_eReturnCode s_FMKNVM_ComputeStorageLayout(void);
+/**
  * @brief Validate object partitions against the selected backend geometry.
  * @retval RC_OK Every configured partition and slot is usable.
  * @retval RC_ERROR_WRONG_CONFIG A partition is invalid or outside storage.
  */
 static t_eReturnCode s_FMKNVM_ValidateConfiguration(void);
 
+//********************************************************************************
+//                      Public functions - Implementation
+//********************************************************************************
 /*********************************
  * FMKNVM_Init
  *********************************/
@@ -362,13 +407,8 @@ t_eReturnCode FMKNVM_Init(void)
         if(Ret_e == RC_OK)
         {
             Runtime_ps->desc_ps = &c_FMKNVM_PartitionDescriptors_as[idx_u16];
-            Ret_e = FMKNVM_Specific_GetPartitionStorage( (t_eFMKNVM_PartitionId) idx_u16, &Runtime_ps->storage_s);
-
-            if(Ret_e == RC_OK)
-            {
-                Ret_e = SafeMem_memclear(   Runtime_ps->desc_ps->cacheData_pu8,
-                                            (t_uint16) Runtime_ps->desc_ps->payloadCapacity_u32);
-            }
+            Ret_e = SafeMem_memclear(   Runtime_ps->desc_ps->cacheData_pu8,
+                                        (t_uint16) Runtime_ps->desc_ps->payloadCapacity_u32);
         }
     }
 
@@ -397,7 +437,7 @@ t_eReturnCode FMKNVM_Init(void)
     //---- 5- Report an initialization error to the assertion service ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -449,7 +489,7 @@ t_eReturnCode FMKNVM_Cyclic(void)
     //---- 2- Report a cyclic processing error ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -476,7 +516,7 @@ t_eReturnCode FMKNVM_GetState(t_eCyclicModState * f_State_pe)
     //---- 3- Report an invalid public API request ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -511,6 +551,10 @@ t_eReturnCode FMKNVM_GetObjectInfo(t_eFMKNVM_ObjectId f_ObjectId_e, t_sFMKNVM_Ob
         //---- 2- Validate the object identifier ----//
         Ret_e = RC_ERROR_PARAM_INVALID;
     }
+    else if(g_FMKNVM_Sts_e != STATE_CYCLIC_OPE)
+    {
+        Ret_e = RC_WARNING_BUSY;
+    }
     else
     {
         const t_sFMKNVM_ObjectDescriptor * ObjectDesc_ps = &c_FMKNVM_ObjectDescriptors_as[f_ObjectId_e];
@@ -529,7 +573,7 @@ t_eReturnCode FMKNVM_GetObjectInfo(t_eFMKNVM_ObjectId f_ObjectId_e, t_sFMKNVM_Ob
     //---- 4- Report an invalid object information request ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -552,6 +596,10 @@ t_eReturnCode FMKNVM_GetObject(t_eFMKNVM_ObjectId f_ObjectId_e, void * f_Data_pv
         //---- 2- Validate the object identifier ----//
         Ret_e = RC_ERROR_PARAM_INVALID;
     }
+    else if(g_FMKNVM_Sts_e != STATE_CYCLIC_OPE)
+    {
+        Ret_e = RC_WARNING_BUSY;
+    }
     else
     {
         const t_sFMKNVM_ObjectDescriptor * ObjectDesc_ps = &c_FMKNVM_ObjectDescriptors_as[f_ObjectId_e];
@@ -568,7 +616,7 @@ t_eReturnCode FMKNVM_GetObject(t_eFMKNVM_ObjectId f_ObjectId_e, void * f_Data_pv
         }
         else if(isObjectAvailable_b == FALSE)
         {
-            Ret_e = RC_WARNING_NO_OPERATION;
+            Ret_e = RC_WARNING_NVM_OBJECT_NOT_AVAILABLE;
         }
         else
         {
@@ -582,7 +630,7 @@ t_eReturnCode FMKNVM_GetObject(t_eFMKNVM_ObjectId f_ObjectId_e, void * f_Data_pv
     //---- 5- Report an object read error ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -604,6 +652,10 @@ t_eReturnCode FMKNVM_SetObject(t_eFMKNVM_ObjectId f_ObjectId_e, const void * f_D
     {
         //---- 2- Validate the object identifier ----//
         Ret_e = RC_ERROR_PARAM_INVALID;
+    }
+    else if(g_FMKNVM_Sts_e != STATE_CYCLIC_OPE)
+    {
+        Ret_e = RC_WARNING_BUSY;
     }
     else
     {
@@ -675,7 +727,7 @@ t_eReturnCode FMKNVM_SetObject(t_eFMKNVM_ObjectId f_ObjectId_e, const void * f_D
     //---- 7- Report an object cache update error ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -698,6 +750,10 @@ t_eReturnCode FMKNVM_IsPartitionDirty(t_eFMKNVM_PartitionId f_PartitionId_e, t_b
         //---- 2- Validate the partition identifier ----//
         Ret_e = RC_ERROR_PARAM_INVALID;
     }
+    else if(g_FMKNVM_Sts_e != STATE_CYCLIC_OPE)
+    {
+        Ret_e = RC_WARNING_BUSY;
+    }
     else
     {
         t_sFMKNVM_PartitionRuntime * Runtime_ps = &g_FMKNVM_Runtime_as[f_PartitionId_e];
@@ -709,7 +765,7 @@ t_eReturnCode FMKNVM_IsPartitionDirty(t_eFMKNVM_PartitionId f_PartitionId_e, t_b
     //---- 4- Report an invalid partition state request ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -733,6 +789,10 @@ t_eReturnCode FMKNVM_GetPartitionDiagnostics(   t_eFMKNVM_PartitionId f_Partitio
         //---- 2- Validate the partition identifier ----//
         Ret_e = RC_ERROR_PARAM_INVALID;
     }
+    else if(g_FMKNVM_Sts_e != STATE_CYCLIC_OPE)
+    {
+        Ret_e = RC_WARNING_BUSY;
+    }
     else
     {
         t_sFMKNVM_PartitionRuntime * Runtime_ps = &g_FMKNVM_Runtime_as[f_PartitionId_e];
@@ -747,7 +807,7 @@ t_eReturnCode FMKNVM_GetPartitionDiagnostics(   t_eFMKNVM_PartitionId f_Partitio
     //---- 4- Report an invalid diagnostic request ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -761,18 +821,18 @@ static t_eReturnCode s_FMKNVM_RestorePartition( t_eFMKNVM_PartitionId f_Partitio
     const t_sFMKNVM_BackendApi * BackendApi_ps = g_FMKNVM_BackendApi_ps;
     void * BackendContext_pv = BackendApi_ps->context_pv;
     t_sFMKNVM_PartitionRuntime * Runtime_ps = &g_FMKNVM_Runtime_as[f_PartitionId_e];
+    const t_sFMKNVM_PartitionStorageLayout * Storage_ps = &Runtime_ps->storage_s;
     t_bool isRecordFound_b = FALSE;
     t_uint32 bestSequence_u32 = 0U;
     t_eReturnCode Ret_e = RC_OK;
 
     //---- 1- Scan every configured slot of the selected object ----//
     for(t_uint16 slot_u16 = 0U ;
-        (slot_u16 < Runtime_ps->storage_s.slotCount_u16) && (Ret_e == RC_OK) ;
+        (slot_u16 < Runtime_ps->desc_ps->slotCount_u16) && (Ret_e == RC_OK) ;
         slot_u16++)
     {
-        t_uint32 slotStride_u32 = Runtime_ps->storage_s.storageSize_u32 /
-            Runtime_ps->storage_s.slotCount_u16;
-        t_uint32 slotAddress_u32 = Runtime_ps->storage_s.storageOffset_u32 +
+        t_uint32 slotStride_u32 = Storage_ps->slotStride_u32;
+        t_uint32 slotAddress_u32 = Storage_ps->storageOffset_u32 +
             ((t_uint32)slot_u16 * slotStride_u32);
         t_uint32 markerAddress_u32 = slotAddress_u32 +
             s_FMKNVM_GetMarkerOffset(Runtime_ps->desc_ps);
@@ -867,9 +927,17 @@ static t_eReturnCode s_FMKNVM_RestorePartition( t_eFMKNVM_PartitionId f_Partitio
                                 .activeSlot_u16 = slot_u16;
                             g_FMKNVM_Diagnostics_as[f_PartitionId_e]
                                 .activeSequence_u32 = sequence_u32;
+
+                            FMKSRL_LOG("[NVM] : Retrieve partition %d from slot %d\r\n", f_PartitionId_e, slot_u16);
                         }
                     }
                 }
+            }
+            else 
+            {
+                FMKSRL_LOG( "[NVM] : Header of slot %d from partition %d incorrect\r\n",
+                            slot_u16,
+                            f_PartitionId_e);
             }
         }
     }
@@ -877,11 +945,15 @@ static t_eReturnCode s_FMKNVM_RestorePartition( t_eFMKNVM_PartitionId f_Partitio
     //---- 5- Report a physical restoration error ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
 }
+
+//********************************************************************************
+//                      Private functions - Implementation
+//********************************************************************************
 
 /*********************************
  * s_FMKNVM_ConfigurationState
@@ -934,12 +1006,23 @@ static t_eReturnCode s_FMKNVM_ConfigurationState(void)
             Ret_e = BackendApi_ps->GetCapabilities_pcb(BackendContext_pv, Capabilities_ps);
             if(Ret_e == RC_OK)
             {
-                Ret_e = s_FMKNVM_ValidateConfiguration();
+                g_FMKNVM_CfgSts_e = FMKNVM_CFG_LAYOUT;
+            }
+        }
+        break;
+        case FMKNVM_CFG_LAYOUT:
+        {
+            //---- Derive physical ranges only after geometry and capabilities are known ----//
+            Ret_e = s_FMKNVM_ComputeStorageLayout();
 
-                if(Ret_e == RC_OK)
-                {
-                    g_FMKNVM_CfgSts_e = FMKNVM_CFG_RESTORE;
-                }
+            if(Ret_e == RC_OK)
+            {
+                Ret_e = s_FMKNVM_ValidateConfiguration();
+            }
+
+            if(Ret_e == RC_OK)
+            {
+                g_FMKNVM_CfgSts_e = FMKNVM_CFG_RESTORE;
             }
         }
         break;
@@ -969,7 +1052,7 @@ static t_eReturnCode s_FMKNVM_ConfigurationState(void)
     if(Ret_e < RC_OK)
     {
         g_FMKNVM_CfgSts_e = FMKNVM_CFG_ERROR;
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -1016,8 +1099,7 @@ static t_eReturnCode s_FMKNVM_AutomaticCommitMngmt(void)
 /*********************************
  * s_FMKNVM_IsCommitDue
  *********************************/
-static t_eReturnCode
-s_FMKNVM_IsCommitDue(const t_sFMKNVM_PartitionRuntime * f_Runtime_ps, t_bool * f_IsCommitDue_pb)
+static t_eReturnCode s_FMKNVM_IsCommitDue(const t_sFMKNVM_PartitionRuntime * f_Runtime_ps, t_bool * f_IsCommitDue_pb)
 {
     t_eReturnCode Ret_e = RC_OK;
 
@@ -1123,7 +1205,7 @@ static t_eReturnCode s_FMKNVM_ProcessCommit(void)
                 }
                 else if(Ret_e < RC_OK)
                 {
-                    ASSERT((t_uint16)Ret_e);
+                    ASSERT((t_sint32)Ret_e);
                     g_FMKNVM_CommitState_e = FMKNVM_COMMIT_IDLE;
                 }
             }
@@ -1356,7 +1438,7 @@ static t_eReturnCode s_FMKNVM_ProcessCommit(void)
             default:
             {
                 Ret_e = RC_ERROR_WRONG_STATE;
-                ASSERT((t_uint16)Ret_e);
+                ASSERT((t_sint32)Ret_e);
                 g_FMKNVM_CommitState_e = FMKNVM_COMMIT_IDLE;
             }
             break;
@@ -1417,6 +1499,7 @@ static t_eReturnCode s_FMKNVM_CommitPrepareState(void)
 {
     t_eFMKNVM_PartitionId PartitionId_e = g_FMKNVM_ActiveRequest_s.partitionId_e;
     t_sFMKNVM_PartitionRuntime * Runtime_ps = &g_FMKNVM_Runtime_as[PartitionId_e];
+    const t_sFMKNVM_PartitionStorageLayout * Storage_ps = &Runtime_ps->storage_s;
     t_uint8 * Header_pu8 = g_FMKNVM_RecordBuffer_au8;
     t_uint8 * Payload_pu8 = &g_FMKNVM_RecordBuffer_au8[FMKNVM_RECORD_HEADER_SIZE];
     t_uint32 payloadCrc_u32;
@@ -1457,8 +1540,7 @@ static t_eReturnCode s_FMKNVM_CommitPrepareState(void)
 
     if(Ret_e == RC_OK)
     {
-        t_uint32 slotStride_u32 = Runtime_ps->storage_s.storageSize_u32 /
-            Runtime_ps->storage_s.slotCount_u16;
+        t_uint32 slotStride_u32 = Storage_ps->slotStride_u32;
 
         s_FMKNVM_WriteU32(&Header_pu8[20U], headerCrc_u32);
 
@@ -1468,7 +1550,7 @@ static t_eReturnCode s_FMKNVM_CommitPrepareState(void)
             t_uint16 activeSlot_u16 = g_FMKNVM_Diagnostics_as[PartitionId_e].activeSlot_u16;
 
             g_FMKNVM_ActiveSlot_u16 = (t_uint16)((activeSlot_u16 + 1U) %
-                           Runtime_ps->storage_s.slotCount_u16);
+                           Runtime_ps->desc_ps->slotCount_u16);
         }
         else
         {
@@ -1476,7 +1558,7 @@ static t_eReturnCode s_FMKNVM_CommitPrepareState(void)
         }
 
         //---- 6- Publish the physical candidate record boundaries ----//
-        g_FMKNVM_ActiveSlotAddress_u32 = Runtime_ps->storage_s.storageOffset_u32 +
+        g_FMKNVM_ActiveSlotAddress_u32 = Storage_ps->storageOffset_u32 +
             ((t_uint32)g_FMKNVM_ActiveSlot_u16 *
              slotStride_u32);
         g_FMKNVM_ActiveRecordSize_u32 = FMKNVM_RECORD_HEADER_SIZE +
@@ -1495,8 +1577,8 @@ static t_eReturnCode s_FMKNVM_CommitEraseState(void)
     void * BackendContext_pv = BackendApi_ps->context_pv;
     t_eFMKNVM_PartitionId PartitionId_e = g_FMKNVM_ActiveRequest_s.partitionId_e;
     t_sFMKNVM_PartitionRuntime * Runtime_ps = &g_FMKNVM_Runtime_as[PartitionId_e];
-    t_uint32 slotStride_u32 = Runtime_ps->storage_s.storageSize_u32 /
-        Runtime_ps->storage_s.slotCount_u16;
+    const t_sFMKNVM_PartitionStorageLayout * Storage_ps = &Runtime_ps->storage_s;
+    t_uint32 slotStride_u32 = Storage_ps->slotStride_u32;
     t_eReturnCode Ret_e;
 
     //---- 1- Progress or start the candidate slot erase ----//
@@ -1591,7 +1673,7 @@ static t_eReturnCode s_FMKNVM_CommitReadRecordState(void)
 
     if(Ret_e < RC_OK)
     {
-        Ret_e = RC_NVM_BACKEND_READ_ERROR;
+        Ret_e = RC_ERROR_NVM_BACKEND_READ;
     }
 
     return Ret_e;
@@ -1611,7 +1693,8 @@ static t_eReturnCode s_FMKNVM_CommitCheckRecordState(void)
 
     if(Ret_e != RC_OK)
     {
-        Ret_e = RC_NVM_VERIFY_ERROR;
+        ASSERT((t_sint32)Ret_e);
+        Ret_e = RC_ERROR_NVM_NVM_VERIFY;
     }
 
     return Ret_e;
@@ -1675,7 +1758,7 @@ static t_eReturnCode s_FMKNVM_CommitReadMarkerState(void)
 
     if(Ret_e < RC_OK)
     {
-        Ret_e = RC_NVM_BACKEND_READ_ERROR;
+        Ret_e = RC_ERROR_NVM_BACKEND_READ;
     }
 
     return Ret_e;
@@ -1695,7 +1778,7 @@ static t_eReturnCode s_FMKNVM_CommitCheckMarkerState(void)
     //---- 2- Validate persistence before publishing success ----//
     if(marker_u32 != FMKNVM_COMMIT_MARKER)
     {
-        Ret_e = RC_NVM_VERIFY_ERROR;
+        Ret_e = RC_ERROR_NVM_NVM_VERIFY;
     }
 
     return Ret_e;
@@ -1767,8 +1850,7 @@ static t_eReturnCode s_FMKNVM_CommitErrorState(void)
 /*********************************
  * s_FMKNVM_RegisterCommitError
  *********************************/
-static void
-s_FMKNVM_RegisterCommitError(t_eReturnCode f_Error_e)
+static void s_FMKNVM_RegisterCommitError(t_eReturnCode f_Error_e)
 {
     t_eFMKNVM_PartitionId PartitionId_e = g_FMKNVM_ActiveRequest_s.partitionId_e;
 
@@ -1779,7 +1861,7 @@ s_FMKNVM_RegisterCommitError(t_eReturnCode f_Error_e)
     }
 
     //---- 2- Report every failed commit transaction ----//
-    ASSERT((t_uint16)f_Error_e);
+    ASSERT((t_sint32)f_Error_e);
 }
 
 /*********************************
@@ -1812,7 +1894,7 @@ static t_eReturnCode s_FMKNVM_OperationalState(void)
     //---- 4- Report an operational scheduling or commit error ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;
@@ -1891,6 +1973,185 @@ static t_uint32 s_FMKNVM_GetMarkerOffset(   const t_sFMKNVM_PartitionDescriptor 
 }
 
 /*********************************
+ * s_FMKNVM_AlignUp
+ *********************************/
+static t_eReturnCode s_FMKNVM_AlignUp(t_uint32 f_Value_u32, t_uint32 f_Alignment_u32,
+                                      t_uint32 * f_AlignedValue_pu32)
+{
+    t_eReturnCode Ret_e = RC_OK;
+
+    if(f_AlignedValue_pu32 == NULL)
+    {
+        ASSERT((t_sint32)0);
+        Ret_e = RC_ERROR_PTR_NULL;
+    }
+    else if(f_Alignment_u32 == 0U)
+    {
+        ASSERT((t_sint32)0);
+        Ret_e = RC_ERROR_WRONG_CONFIG;
+    }
+    else
+    {
+        t_uint32 remainder_u32 = f_Value_u32 % f_Alignment_u32;
+
+        if(remainder_u32 == 0U)
+        {
+            *f_AlignedValue_pu32 = f_Value_u32;
+        }
+        else
+        {
+            t_uint32 increment_u32 = f_Alignment_u32 - remainder_u32;
+
+            if(f_Value_u32 > (0xFFFFFFFFUL - increment_u32))
+            {
+                ASSERT((t_sint32)0);
+                Ret_e = RC_ERROR_WRONG_CONFIG;
+            }
+            else
+            {
+                *f_AlignedValue_pu32 = f_Value_u32 + increment_u32;
+            }
+        }
+    }
+
+    return Ret_e;
+}
+
+/*********************************
+ * s_FMKNVM_ComputeStorageLayout
+ *********************************/
+static t_eReturnCode s_FMKNVM_ComputeStorageLayout(void)
+{
+    t_eReturnCode Ret_e = RC_OK;
+    t_uint32 slotAlignment_u32 = 0U;
+    t_uint32 nextPartitionOffset_u32 = 0U;
+
+    //---- 1- Validate geometry required by the layout calculation ----//
+    if((g_FMKNVM_Geometry_s.storageSize_u32 == 0U) ||
+       (g_FMKNVM_Geometry_s.programUnitSize_u32 == 0U) ||
+       (g_FMKNVM_Geometry_s.commitUnitSize_u32 == 0U))
+    {
+        ASSERT((t_sint32)0);
+        Ret_e = RC_ERROR_WRONG_CONFIG;
+    }
+    else if(g_FMKNVM_Capabilities_s.eraseRequired_b == TRUE)
+    {
+        //---- One Flash slot must own complete independent erase units ----//
+        if((g_FMKNVM_Geometry_s.eraseUnitSize_u32 == 0U) ||
+           ((g_FMKNVM_Geometry_s.eraseUnitSize_u32 % g_FMKNVM_Geometry_s.programUnitSize_u32) != 0U) ||
+           ((g_FMKNVM_Geometry_s.eraseUnitSize_u32 % g_FMKNVM_Geometry_s.commitUnitSize_u32) != 0U))
+        {
+            ASSERT((t_sint32)0);
+            Ret_e = RC_ERROR_WRONG_CONFIG;
+        }
+        else
+        {
+            slotAlignment_u32 = g_FMKNVM_Geometry_s.eraseUnitSize_u32;
+        }
+    }
+    else
+    {
+        //---- EEPROM slots are packed on the LCM of program and commit units ----//
+        t_uint32 gcdA_u32 = g_FMKNVM_Geometry_s.programUnitSize_u32;
+        t_uint32 gcdB_u32 = g_FMKNVM_Geometry_s.commitUnitSize_u32;
+
+        while(gcdB_u32 != 0U)
+        {
+            t_uint32 remainder_u32 = gcdA_u32 % gcdB_u32;
+            gcdA_u32 = gcdB_u32;
+            gcdB_u32 = remainder_u32;
+        }
+
+        if((gcdA_u32 == 0U) ||
+           ((g_FMKNVM_Geometry_s.programUnitSize_u32 / gcdA_u32) >
+            (0xFFFFFFFFUL / g_FMKNVM_Geometry_s.commitUnitSize_u32)))
+        {
+            ASSERT((t_sint32)0);
+            Ret_e = RC_ERROR_WRONG_CONFIG;
+        }
+        else
+        {
+            slotAlignment_u32 = (g_FMKNVM_Geometry_s.programUnitSize_u32 / gcdA_u32) *
+                g_FMKNVM_Geometry_s.commitUnitSize_u32;
+        }
+    }
+
+    //---- 2- Allocate partitions sequentially in enum order ----//
+    for(t_uint16 idx_u16 = 0U ;
+        (idx_u16 < (t_uint16)FMKNVM_PARTITION_NB) && (Ret_e == RC_OK) ;
+        idx_u16++)
+    {
+        t_sFMKNVM_PartitionRuntime * Runtime_ps = &g_FMKNVM_Runtime_as[idx_u16];
+        const t_sFMKNVM_PartitionDescriptor * Descriptor_ps = Runtime_ps->desc_ps;
+
+        if((Descriptor_ps == NULL) || (Descriptor_ps->cacheData_pu8 == NULL) ||
+           (Descriptor_ps->payloadCapacity_u32 == 0U) ||
+           (Descriptor_ps->payloadCapacity_u32 > FMKNVM_MAX_PARTITION_PAYLOAD_CAPACITY) ||
+           (Descriptor_ps->payloadCapacity_u32 > 0xFFFFU) ||
+           (Descriptor_ps->formatVersion_u16 == 0U) ||
+           (Descriptor_ps->slotCount_u16 < 2U))
+        {
+            ASSERT((t_sint32)0);
+            Ret_e = RC_ERROR_WRONG_CONFIG;
+        }
+        else
+        {
+            t_uint32 requiredSlotSize_u32 = s_FMKNVM_GetMarkerOffset(Descriptor_ps);
+            t_uint32 slotStride_u32 = 0U;
+            t_uint32 partitionOffset_u32 = 0U;
+            t_uint32 partitionSize_u32 = 0U;
+
+            if(requiredSlotSize_u32 > (0xFFFFFFFFUL - FMKNVM_RECORD_MARKER_SIZE))
+            {
+                ASSERT((t_sint32)0);
+                Ret_e = RC_ERROR_WRONG_CONFIG;
+            }
+            else
+            {
+                requiredSlotSize_u32 += FMKNVM_RECORD_MARKER_SIZE;
+                Ret_e = s_FMKNVM_AlignUp(requiredSlotSize_u32, slotAlignment_u32, &slotStride_u32);
+            }
+
+            if(Ret_e == RC_OK)
+            {
+                Ret_e = s_FMKNVM_AlignUp(nextPartitionOffset_u32, slotAlignment_u32, &partitionOffset_u32);
+            }
+
+            if(Ret_e == RC_OK)
+            {
+                if(slotStride_u32 > (0xFFFFFFFFUL / (t_uint32)Descriptor_ps->slotCount_u16))
+                {
+                    Ret_e = RC_ERROR_WRONG_CONFIG;
+                }
+                else
+                {
+                    partitionSize_u32 = slotStride_u32 * (t_uint32)Descriptor_ps->slotCount_u16;
+                }
+            }
+
+            //---- 3- Reject the partition before publishing a range outside the backend ----//
+            if(Ret_e == RC_OK)
+            {
+                if((partitionOffset_u32 > g_FMKNVM_Geometry_s.storageSize_u32) ||
+                   (partitionSize_u32 > (g_FMKNVM_Geometry_s.storageSize_u32 - partitionOffset_u32)))
+                {
+                    Ret_e = RC_ERROR_WRONG_CONFIG;
+                }
+                else
+                {
+                    Runtime_ps->storage_s.storageOffset_u32 = partitionOffset_u32;
+                    Runtime_ps->storage_s.storageSize_u32 = partitionSize_u32;
+                    Runtime_ps->storage_s.slotStride_u32 = slotStride_u32;
+                    nextPartitionOffset_u32 = partitionOffset_u32 + partitionSize_u32;
+                }
+            }
+        }
+    }
+
+    return Ret_e;
+}
+
+/*********************************
  * s_FMKNVM_ValidateConfiguration
  *********************************/
 static t_eReturnCode s_FMKNVM_ValidateConfiguration(void)
@@ -1898,87 +2159,104 @@ static t_eReturnCode s_FMKNVM_ValidateConfiguration(void)
     t_eReturnCode Ret_e = RC_OK;
 
     //---- 1- Validate the generic backend geometry ----//
-    if((g_FMKNVM_Geometry_s.storageSize_u32 == 0U) || (g_FMKNVM_Geometry_s.programUnitSize_u32 == 0U) ||
-       (g_FMKNVM_Geometry_s.commitUnitSize_u32 == 0U))
+    if((g_FMKNVM_Geometry_s.storageSize_u32 == 0U) ||
+       (g_FMKNVM_Geometry_s.programUnitSize_u32 == 0U) ||
+       (g_FMKNVM_Geometry_s.commitUnitSize_u32 == 0U) ||
+       ((g_FMKNVM_Capabilities_s.eraseRequired_b == TRUE) &&
+        (g_FMKNVM_Geometry_s.eraseUnitSize_u32 == 0U)))
     {
+        ASSERT((t_sint32)0);
         Ret_e = RC_ERROR_WRONG_CONFIG;
     }
 
-    //---- 2- Validate every partition and its fixed slot stride ----//
+    //---- 2- Validate every derived partition range and slot stride ----//
     for(t_uint16 idx_u16 = 0U ;
         (idx_u16 < (t_uint16)FMKNVM_PARTITION_NB) && (Ret_e == RC_OK) ;
         idx_u16++)
     {
         t_sFMKNVM_PartitionRuntime * Runtime_ps = &g_FMKNVM_Runtime_as[idx_u16];
         const t_sFMKNVM_PartitionDescriptor * Descriptor_ps = Runtime_ps->desc_ps;
-        const t_sFMKNVM_PartitionStorageCfg * Storage_ps = &Runtime_ps->storage_s;
+        const t_sFMKNVM_PartitionStorageLayout * Storage_ps = &Runtime_ps->storage_s;
 
-        if((Descriptor_ps == NULL) || (Descriptor_ps->cacheData_pu8 == NULL))
+        if((Descriptor_ps == NULL) || (Descriptor_ps->cacheData_pu8 == NULL) ||
+           (Descriptor_ps->slotCount_u16 < 2U) ||
+           (Descriptor_ps->payloadCapacity_u32 == 0U) ||
+           (Descriptor_ps->payloadCapacity_u32 > FMKNVM_MAX_PARTITION_PAYLOAD_CAPACITY) ||
+           (Descriptor_ps->payloadCapacity_u32 > 0xFFFFU) ||
+           (Descriptor_ps->formatVersion_u16 == 0U) ||
+           (Storage_ps->storageSize_u32 == 0U) ||
+           (Storage_ps->slotStride_u32 == 0U))
         {
-            Ret_e = RC_ERROR_WRONG_CONFIG;
-        }
-        else if((Storage_ps->slotCount_u16 == 0U) || (Descriptor_ps->payloadCapacity_u32 == 0U) ||
-           (Descriptor_ps->payloadCapacity_u32 >
-            FMKNVM_MAX_PARTITION_PAYLOAD_CAPACITY) || (Descriptor_ps->payloadCapacity_u32 > 0xFFFFU) ||
-           (Descriptor_ps->formatVersion_u16 == 0U) || (Storage_ps->storageSize_u32 == 0U))
-        {
+            ASSERT((t_sint32)0);
             Ret_e = RC_ERROR_WRONG_CONFIG;
         }
         else
         {
-            t_uint32 partitionEnd_u32 = Storage_ps->storageOffset_u32 +
-                Storage_ps->storageSize_u32;
-            t_uint32 slotStride_u32 = Storage_ps->storageSize_u32 /
-                Storage_ps->slotCount_u16;
-            t_uint32 requiredSlotSize_u32 = s_FMKNVM_GetMarkerOffset(Descriptor_ps) +
-                FMKNVM_RECORD_MARKER_SIZE;
+            t_uint32 partitionEnd_u32 = Storage_ps->storageOffset_u32 + Storage_ps->storageSize_u32;
+            t_uint32 requiredSlotSize_u32 = s_FMKNVM_GetMarkerOffset(Descriptor_ps) + FMKNVM_RECORD_MARKER_SIZE;
+            t_uint32 expectedStorageSize_u32 = 0U;
 
-            if((partitionEnd_u32 < Storage_ps->storageOffset_u32) || (partitionEnd_u32 >
-                g_FMKNVM_Geometry_s.storageSize_u32) || (slotStride_u32 < requiredSlotSize_u32) ||
-               ((Storage_ps->storageSize_u32 %
-                 Storage_ps->slotCount_u16) != 0U) || ((Storage_ps->storageOffset_u32 %
-                 g_FMKNVM_Geometry_s.programUnitSize_u32) != 0U) || ((slotStride_u32 %
-                 g_FMKNVM_Geometry_s.programUnitSize_u32) != 0U))
+            if(Storage_ps->slotStride_u32 > (0xFFFFFFFFUL / (t_uint32)Descriptor_ps->slotCount_u16))
             {
+                ASSERT((t_sint32)0);
                 Ret_e = RC_ERROR_WRONG_CONFIG;
             }
-            else if(g_FMKNVM_Capabilities_s.eraseRequired_b == TRUE)
+            else
             {
-                if((g_FMKNVM_Geometry_s.eraseUnitSize_u32 == 0U) || ((Storage_ps->storageOffset_u32 %
-                     g_FMKNVM_Geometry_s.eraseUnitSize_u32) != 0U) || ((slotStride_u32 %
-                     g_FMKNVM_Geometry_s.eraseUnitSize_u32) != 0U))
+                expectedStorageSize_u32 = Storage_ps->slotStride_u32 * (t_uint32)Descriptor_ps->slotCount_u16;
+            }
+
+            if((Ret_e == RC_OK) &&
+               ((partitionEnd_u32 < Storage_ps->storageOffset_u32) ||
+                (partitionEnd_u32 > g_FMKNVM_Geometry_s.storageSize_u32) ||
+                (Storage_ps->storageSize_u32 != expectedStorageSize_u32) ||
+                (Storage_ps->slotStride_u32 < requiredSlotSize_u32) ||
+                ((Storage_ps->storageOffset_u32 % g_FMKNVM_Geometry_s.programUnitSize_u32) != 0U) ||
+                ((Storage_ps->slotStride_u32 % g_FMKNVM_Geometry_s.programUnitSize_u32) != 0U) ||
+                ((Storage_ps->storageOffset_u32 % g_FMKNVM_Geometry_s.commitUnitSize_u32) != 0U) ||
+                ((Storage_ps->slotStride_u32 % g_FMKNVM_Geometry_s.commitUnitSize_u32) != 0U)))
+            {
+                ASSERT((t_sint32)0);
+                Ret_e = RC_ERROR_WRONG_CONFIG;
+            }
+            else if((Ret_e == RC_OK) && (g_FMKNVM_Capabilities_s.eraseRequired_b == TRUE))
+            {
+                if(((Storage_ps->storageOffset_u32 % g_FMKNVM_Geometry_s.eraseUnitSize_u32) != 0U) ||
+                   ((Storage_ps->slotStride_u32 % g_FMKNVM_Geometry_s.eraseUnitSize_u32) != 0U))
                 {
+                    ASSERT((t_sint32)0);
                     Ret_e = RC_ERROR_WRONG_CONFIG;
                 }
             }
             else
             {
-                //---- No erase alignment applies to EEPROM backends ----//
+                //---- No additional erase-unit constraint applies to EEPROM backends ----//
             }
         }
     }
 
-    //---- 3- Reject overlapping physical partition ranges ----//
+    //---- 3- Reject overlapping derived partition ranges ----//
     for(t_uint16 firstIdx_u16 = 0U ;
         (firstIdx_u16 < (t_uint16)FMKNVM_PARTITION_NB) && (Ret_e == RC_OK) ;
         firstIdx_u16++)
     {
-        const t_sFMKNVM_PartitionStorageCfg * FirstStorage_ps = &g_FMKNVM_Runtime_as[firstIdx_u16].storage_s;
-        t_uint32 firstEnd_u32 = FirstStorage_ps->storageOffset_u32 +
-            FirstStorage_ps->storageSize_u32;
+        const t_sFMKNVM_PartitionStorageLayout * FirstStorage_ps =
+            &g_FMKNVM_Runtime_as[firstIdx_u16].storage_s;
+        t_uint32 firstEnd_u32 = FirstStorage_ps->storageOffset_u32 + FirstStorage_ps->storageSize_u32;
 
         for(t_uint16 secondIdx_u16 = firstIdx_u16 + 1U ;
             (secondIdx_u16 < (t_uint16)FMKNVM_PARTITION_NB) && (Ret_e == RC_OK) ;
             secondIdx_u16++)
         {
-            const t_sFMKNVM_PartitionStorageCfg * SecondStorage_ps = &g_FMKNVM_Runtime_as[secondIdx_u16].storage_s;
-            t_uint32 secondEnd_u32 = SecondStorage_ps->storageOffset_u32 +
-                SecondStorage_ps->storageSize_u32;
+            const t_sFMKNVM_PartitionStorageLayout * SecondStorage_ps =
+                &g_FMKNVM_Runtime_as[secondIdx_u16].storage_s;
+            t_uint32 secondEnd_u32 = SecondStorage_ps->storageOffset_u32 + SecondStorage_ps->storageSize_u32;
             t_bool rangesOverlap_b = (FirstStorage_ps->storageOffset_u32 < secondEnd_u32) &&
                 (SecondStorage_ps->storageOffset_u32 < firstEnd_u32);
 
             if(rangesOverlap_b == TRUE)
             {
+                ASSERT((t_sint32)0);
                 Ret_e = RC_ERROR_WRONG_CONFIG;
             }
         }
@@ -1991,22 +2269,24 @@ static t_eReturnCode s_FMKNVM_ValidateConfiguration(void)
     {
         const t_sFMKNVM_ObjectDescriptor * ObjectDesc_ps = &c_FMKNVM_ObjectDescriptors_as[idx_u16];
 
-        if((ObjectDesc_ps->partitionId_e >= FMKNVM_PARTITION_NB) || (ObjectDesc_ps->size_u32 == 0U) ||
+        if((ObjectDesc_ps->partitionId_e >= FMKNVM_PARTITION_NB) ||
+           (ObjectDesc_ps->size_u32 == 0U) ||
            (ObjectDesc_ps->version_u16 == 0U))
         {
+            ASSERT((t_sint32)0);
             Ret_e = RC_ERROR_WRONG_CONFIG;
         }
         else
         {
-            const t_sFMKNVM_PartitionDescriptor * PartitionDesc_ps = &c_FMKNVM_PartitionDescriptors_as[
-                    ObjectDesc_ps->partitionId_e];
-            t_uint32 objectEnd_u32 = ObjectDesc_ps->offset_u32 +
-                ObjectDesc_ps->size_u32;
+            const t_sFMKNVM_PartitionDescriptor * PartitionDesc_ps =
+                &c_FMKNVM_PartitionDescriptors_as[ObjectDesc_ps->partitionId_e];
+            t_uint32 objectEnd_u32 = ObjectDesc_ps->offset_u32 + ObjectDesc_ps->size_u32;
 
-            if((ObjectDesc_ps->offset_u32 <
-                FMKNVM_OBJECT_VALIDITY_BITMAP_SIZE) || (objectEnd_u32 >
-                PartitionDesc_ps->payloadCapacity_u32) || (objectEnd_u32 < ObjectDesc_ps->offset_u32))
+            if((ObjectDesc_ps->offset_u32 < FMKNVM_OBJECT_VALIDITY_BITMAP_SIZE) ||
+               (objectEnd_u32 > PartitionDesc_ps->payloadCapacity_u32) ||
+               (objectEnd_u32 < ObjectDesc_ps->offset_u32))
             {
+                ASSERT((t_sint32)0);
                 Ret_e = RC_ERROR_WRONG_CONFIG;
             }
         }
@@ -2029,8 +2309,10 @@ static t_eReturnCode s_FMKNVM_ValidateConfiguration(void)
             t_bool rangesOverlap_b = (FirstObject_ps->offset_u32 < secondEnd_u32) &&
                 (SecondObject_ps->offset_u32 < firstEnd_u32);
 
-            if((FirstObject_ps->partitionId_e == SecondObject_ps->partitionId_e) && (rangesOverlap_b == TRUE))
+            if((FirstObject_ps->partitionId_e == SecondObject_ps->partitionId_e) &&
+               (rangesOverlap_b == TRUE))
             {
+                ASSERT((t_sint32)0);
                 Ret_e = RC_ERROR_WRONG_CONFIG;
             }
         }
@@ -2039,7 +2321,7 @@ static t_eReturnCode s_FMKNVM_ValidateConfiguration(void)
     //---- 6- Report an invalid persistent storage configuration ----//
     if(Ret_e < RC_OK)
     {
-        ASSERT((t_uint16)Ret_e);
+        ASSERT((t_sint32)Ret_e);
     }
 
     return Ret_e;

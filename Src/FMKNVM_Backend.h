@@ -7,10 +7,12 @@
 
 #include "TypeCommon.h"
 
-/// @brief Describes generic physical storage geometry.
+/// @brief Describes the geometry of the complete physical storage backend.
+/// @note Partition offsets, sizes and slot counts are owned by FMK_NVM private
+///       configuration and are intentionally not exposed by the backend.
 typedef struct __t_sFMKNVM_BackendGeometry
 {
-    t_uint32 storageSize_u32;     ///< Total usable size in bytes.
+    t_uint32 storageSize_u32;     ///< Total backend-relative usable size in bytes.
     t_uint32 eraseUnitSize_u32;   ///< Smallest erasable unit in bytes.
     t_uint32 programUnitSize_u32; ///< Smallest program unit in bytes.
     t_uint32 commitUnitSize_u32;  ///< Atomic commit unit in bytes.
@@ -63,7 +65,7 @@ typedef t_eReturnCode
  * @param[out] f_Data_pu8 : Destination buffer of f_Size_u32 bytes.
  * @param[in] f_Size_u32 : Number of bytes to read.
  * @retval RC_OK Success.
- * @retval RC_NVM_BACKEND_READ_ERROR Physical read failed.
+ * @retval RC_ERROR_NVM_BACKEND_READ Physical read failed.
  */
 typedef t_eReturnCode (t_cbFMKNVM_BackendRead)(   void * f_Context_pv,
                                                   t_uint32 f_Address_u32,
@@ -78,7 +80,7 @@ typedef t_eReturnCode (t_cbFMKNVM_BackendRead)(   void * f_Context_pv,
  * @param[in] f_Data_pcu8 : Source buffer of f_Size_u32 bytes.
  * @param[in] f_Size_u32 : Number of bytes to program.
  * @retval RC_OK Success or operation accepted.
- * @retval RC_NVM_BACKEND_PROGRAM_ERROR Physical program failed.
+ * @retval RC_ERROR_NVM_BACKEND_PROGRAM Physical program failed.
  */
 typedef t_eReturnCode
     (t_cbFMKNVM_BackendProgram)(   void * f_Context_pv,
@@ -91,7 +93,7 @@ typedef t_eReturnCode
  * @param[in] f_Address_u32 : Backend-relative, erase-unit aligned address.
  * @param[in] f_Size_u32 : Erase-unit multiple to erase in bytes.
  * @retval RC_OK Success or operation accepted.
- * @retval RC_NVM_BACKEND_ERASE_ERROR Physical erase failed.
+ * @retval RC_ERROR_NVM_BACKEND_ERASE Physical erase failed.
  */
 typedef t_eReturnCode (t_cbFMKNVM_BackendErase)(void * f_Context_pv, t_uint32 f_Address_u32, t_uint32 f_Size_u32);
 /**

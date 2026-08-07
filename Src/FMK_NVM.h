@@ -36,7 +36,7 @@ typedef struct __t_sFMKNVM_Diagnostics
  * @note No backend access is performed by this function.
  * @retval RC_OK Runtime data were reset successfully.
  * @retval RC_ERROR_COPY_FAILED Safe memory initialisation failed.
- * @retval RC_ERROR_MISSING_CONFIG Physical partition mapping is unavailable.
+ * @retval RC_ERROR_MISSING_CONFIG No backend is configured.
  */
 t_eReturnCode FMKNVM_Init(void);
 
