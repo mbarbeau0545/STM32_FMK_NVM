@@ -19,7 +19,7 @@
 #include "FMK_HAL/FMK_CPU/Src/FMK_CPU.h"
 #include "FMK_HAL/FMK_SRL/Src/FMK_SRL.h"
 #include "FMK_CFG/FMKCFG_ConfigFiles/FMKNVM_ConfigPrivate.h"
-#include "FMK_CFG/FMKCFG_ConfigSpecific/FMKNVM_ConfigSpecific.h"
+#include "FMK_CFG/FMKCFG_ConfigSpecific/FmkNvmConfigSpecific/FMKNVM_ConfigSpecific.h"
 #include "APP_CTRL/APP_SYS/Src/APP_SYS.h"
 // ********************************************************************
 // *                      Defines
@@ -379,14 +379,6 @@ static t_eReturnCode s_FMKNVM_ValidateConfiguration(void);
 t_eReturnCode FMKNVM_Init(void)
 {
     t_eReturnCode Ret_e = RC_OK;
-
-    //---- 1- Select the backend configured for the current project ----//
-    g_FMKNVM_BackendApi_ps = FMKNVM_Specific_GetBackendApi();
-
-    if(g_FMKNVM_BackendApi_ps == NULL)
-    {
-        Ret_e = RC_ERROR_MISSING_CONFIG;
-    }
 
     //---- 2- Reset every logical partition cache and runtime ----//
     for(t_uint16 idx_u16 = 0U ;
@@ -968,6 +960,8 @@ static t_eReturnCode s_FMKNVM_ConfigurationState(void)
     {
         case FMKNVM_CFG_BACKEND:
         {
+            g_FMKNVM_BackendApi_ps = FMKNVM_Specific_GetBackendApi();
+
             if(BackendApi_ps == NULL)
             {
                 Ret_e = RC_ERROR_MISSING_CONFIG;

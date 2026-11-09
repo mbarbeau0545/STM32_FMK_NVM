@@ -2,7 +2,7 @@
  * @file        FMKNVM_ConfigSpecific.c
  * @brief       Board-specific generated integration for FMK_NVM.
  *********************************************************************/
-#include "FMK_CFG/FMKCFG_ConfigSpecific/FMKNVM_ConfigSpecific.h"
+#include "FMK_CFG/FMKCFG_ConfigSpecific/FmkNvmConfigSpecific/FMKNVM_ConfigSpecific.h"
 #include "FMK_CFG/FMKCFG_ConfigFiles/FMKNVM_ConfigPrivate.h"
 
 /* CAUTION : Automatic generated code section for Backend Include: Start */

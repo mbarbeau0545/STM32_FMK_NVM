@@ -3,7 +3,7 @@
  * @brief       Generated concrete backend implementation for FMK_NVM.
  * @note        Replace BackendTemplate and every generated section.
  *********************************************************************/
-#include "FMK_CFG/FMKCFG_ConfigSpecific/FMKNVM_BackendTemplate.h"
+#include "FMK_CFG/FMKCFG_ConfigSpecific/FmkNvmConfigSpecific/FMKNVM_BackendTemplate.h"
 
 /// @brief Complete addressable capacity of the generated backend.
 #define FMKNVM_TEMPLATE_STORAGE_SIZE ((t_uint32)0U)

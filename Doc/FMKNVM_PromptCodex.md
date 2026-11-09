@@ -211,8 +211,8 @@ src/1_FMK/FMK_HAL/FMK_NVM/Src/FMKNVM_Backend.h
 src/1_FMK/FMK_CFG/FMKCFG_ConfigFiles/FMKNVM_ConfigPublic.h
 src/1_FMK/FMK_CFG/FMKCFG_ConfigFiles/FMKNVM_ConfigPrivate.h
 src/1_FMK/FMK_CFG/FMKCFG_ConfigFiles/FMKNVM_ConfigPrivate.c
-src/1_FMK/FMK_CFG/FMKCFG_ConfigSpecific/FMKNVM_ConfigSpecific.h
-src/1_FMK/FMK_CFG/FMKCFG_ConfigSpecific/FMKNVM_ConfigSpecific.c
+src/1_FMK/FMK_CFG/FMKCFG_ConfigSpecific/FmkNvmConfigSpecific/FMKNVM_ConfigSpecific.h
+src/1_FMK/FMK_CFG/FMKCFG_ConfigSpecific/FmkNvmConfigSpecific/FMKNVM_ConfigSpecific.c
 ```
 
 Respecte l’arborescence réelle du dépôt si elle diffère légèrement, sans créer une arborescence concurrente.
